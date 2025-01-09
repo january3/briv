@@ -1,0 +1,24 @@
+parser:
+  rules: 
+    package:
+      regex: 'Package: (.+)'
+      group: 1
+    version:
+      regex: 'Version: (.+)'
+      group: 1
+    title:
+      regex: 'Title: (.+)'
+      group: 1
+    url:
+      regex: 'URL: (.+)'
+      group: 1
+printer:
+  package_table:
+    style: 'table'
+    columns:
+      - header: 'Package'
+        contents: '{package}'
+      - header: 'Version'
+        contents: '{version}'
+      - header: 'Short description'
+        contents: '{title}'
