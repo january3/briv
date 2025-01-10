@@ -123,6 +123,10 @@ def process_match(obj, rule, field, funcs, match, blob):
 
     if 'string' in rule:
         cur[field] = rule['string']
+    elif 'count' in rule:
+        if field not in cur or not isinstance(cur[field], int):
+            cur[field] = 0
+        cur[field] += 1
     elif 'function' in rule:
         if match:
             cur[field] = funcs[rule['function']](match)
@@ -254,14 +258,16 @@ def new_parser(files, functions_file, config):
     print("Functions:", funcs, file = sys.stderr)
 
     # go over the files and parse them
-    for f in files:
+    
+    for i in range(len(files)):
+        f = files[i]
         if 'path' in f:
             file_parser(f, funcs, config)
             if 'post' in config['parser'] and 'function' in config['parser']['post']:
                 func = config['parser']['post']['function']
                 post = funcs[func](f)
+                files[i] = post
             #print(parsed, file = sys.stderr)
-            f.update(post)
 
     print("|================|\n|- Parsing done -| \n|================|", file = sys.stderr)
     return files

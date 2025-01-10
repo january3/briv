@@ -34,6 +34,9 @@ The next keys are used to specify the value of the resulting object and one
 of them must be present:
 
  * string: This sets the value to the given string.
+ * count: records the number of times the regex matched. If you combine
+   this with the 'key' keyword, you can for example count the occurences of
+   different words matching the same pattern.
  * match: this is the number of the group from the regex, in which case
           the result is a simple key-val pair. OR it is a dict, in which
           case the result is a dict. The dict must only contain keys and
