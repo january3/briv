@@ -22,6 +22,23 @@ def flatfile_load(file_path):
 
     return ret
 
+def default_config():
+    """ Default configuration """
+
+    config = {
+            'parser': {
+                'rules': {
+                    'default': {
+                        'regex': r"^([^:=]*) *[:=] *(.*)$",
+                        'key': 1,
+                        'value': 2
+                        }
+                    }
+                }
+            }
+
+    return config
+
 def yaml_load(file_path):
     """ Load the file list master yaml file"""
 
@@ -40,9 +57,13 @@ def load_function_from_file(file_path, function_name):
     print(f"loading function: {function_name} from {file_path}", file = sys.stderr)
     spec = importlib.util.spec_from_file_location("custom_functions", file_path)
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
 
-    return getattr(module, function_name)
+    try:
+        spec.loader.exec_module(module)
+        return getattr(module, function_name)
+    except Exception as e:
+        print(f"Error loading function '{function_name}' from {file_path}: {e}", file=sys.stderr)
+        sys.exit(1)
 
 def parse_field(ret, field):
     """ convert a_b_c into [a][b][c]... structure
@@ -65,50 +86,117 @@ def parse_field(ret, field):
 
     return cur, field
 
-def file_parser(file, funcs, config):
+def process_match(obj, rule, field, funcs, match, blob):
+    """ apply a rule to a blob of text """
+
+    print(f" --- processing rule {rule} for field {field}", file = sys.stderr)
+
+    if not match:
+        print(f"Warning: no match for rule", file = sys.stderr)
+
+    if match and 'key' in rule:
+        print(f" --- setting key to match.group({rule['key']}) = {match.group(rule['key'])}", file = sys.stderr)
+        field = match.group(rule['key'])
+
+    # convert a_b_c into [a][b][c]... structure
+    # XXX this can cause problems...
+    cur, field = parse_field(obj, field)
+
+    if 'string' in rule:
+        cur[field] = rule['string']
+        return
+
+    # simple flat key
+    if match and 'match' in rule:
+        cur[field] = match.group(rule['match'])
+        print(f"Setting {field} to {cur[field]}", file = sys.stderr)
+        return
+
+    if 'rules' in rule:
+        print("!!!Applying rules", file = sys.stderr)
+        cur[field] = { }
+        apply_rules(cur[field], rule['rules'], funcs = funcs, blob = blob, match = match)
+        print("!!!cur is now: ", cur, file = sys.stderr)
+        return
+
+    if 'function' in rule:
+        if match:
+            cur[field] = funcs[rule['function']](match)
+        else:
+            cur[field] = funcs[rule['function']](blob)
+        return
+
+    if match:
+        print(" --- setting field to match.group(0)", file = sys.stderr)
+        cur[field] = match.group(0)
+        return
+
+
+#   # multiple subkeys
+#   if 'subkeys' in rule:
+#       if field not in ret:
+#           ret[field] = { }
+#       for subkey, subkey_group in rule['subkeys'].items():
+#           if 'function' in subkey_group:
+#               ret[field][subkey] = funcs[subkey_group['function']](match)
+#           elif 'group' in subkey_group:
+#               ret[field][subkey] = match.group(subkey_group['group'])
+#
+    print("!!! obj is now: ", obj, file = sys.stderr)
+    return
+
+def apply_rules(obj, rules, funcs, blob = None, match = None):
+    """ applies a set of rules to a blob of text """
+
+
+    if blob is None and match is None:
+        print("apply_rules(): No blob or match provided", file = sys.stderr)
+        #raise ValueError("apply_rules(): No blob or match provided")
+
+    # apply the rules
+    for field, rule in rules.items():
+
+        print(f'Processing rule named "{field}" rule:\n{rule}', file = sys.stderr)
+
+        if 'regex' not in rule:
+            #raise ValueError(f"No regex section in rule {field} of the parser config")
+            print(f"Warning: no regex section in {field} of the parser config", file = sys.stderr)
+            print("calling process_match with None", file = sys.stderr)
+            process_match(obj, rule, field, funcs, None, blob = blob)
+            continue
+
+        blob_cur = blob
+
+        # for sub-rules, use the appropriate blob
+        if match:
+            print(f"match is {match}", file = sys.stderr)
+            if 'group' not in rule:
+                raise ValueError(f"No group section in rule {field} of the parser config")
+            blob_cur = match.group(rule['group'])
+            print(f" + blob is now {blob}", file = sys.stderr)
+
+        for curmatch in re.finditer(rule['regex'], blob_cur, flags = re.MULTILINE):
+            print(f" + Match found for {field}", file = sys.stderr)
+            print(f" + Match groups: {curmatch.groups()}", file = sys.stderr)
+            process_match(obj, rule, field, funcs, match = curmatch, blob = None)
+
+    return
+
+
+def file_parser(obj, funcs, config):
     """ parse a single file """
 
-    file_path = file['path']
+    file_path = obj['path']
     print(f"Parsing file {file_path}", file = sys.stderr)
-
-    ret = file.copy()
 
     # read the file to be parsed
     with open(file_path, 'r') as stream:
         blob = stream.read()
 
-    # apply the rules
-    for field, rule in config['parser']['rules'].items():
+    apply_rules(obj, config['parser']['rules'], funcs = funcs, blob = blob)
 
-        match = re.search(rule['regex'], blob)
-
-        if not match:
-            print(f"Warning: no match for rule {field} in {file_path}", file = sys.stderr)
-            continue
-
-        # convert a_b_c into [a][b][c]... structure
-        cur, field = parse_field(ret, field)
-
-        # simple flat key
-        if 'group' in rule:
-            cur[field] = match.group(rule['group'])
-            continue
-
-        if 'function' in rule:
-            cur[field] = funcs[rule['function']](match)
-            continue
-
-        # multiple subkeys
-        if 'subkeys' in rule:
-            if field not in cur:
-                cur[field] = { }
-            for subkey, subkey_group in rule['subkeys'].items():
-                if 'function' in subkey_group:
-                    cur[field][subkey] = funcs[subkey_group['function']](match)
-                elif 'group' in subkey_group:
-                    cur[field][subkey] = match.group(subkey_group['group'])
-
-    return ret
+    print("[file_parser()] ret is now", obj, file = sys.stderr)
+    return
 
 def parser_check_rules(rules):
     """ Check the parser configuration """
@@ -118,12 +206,24 @@ def parser_check_rules(rules):
     for k, v in rules.items():
         if 'regex' not in v:
             print(f"Warning: no regex section in {k} of the parser config", file = sys.stderr)
-        else:
-            filtered_rules[k] = v
-            if 'subkeys' in v and ('function' in v or 'group' in v):
-               print(f"Warning: parser key {k}: subkeys ignored if function or group already present", file = sys.stderr)
+        filtered_rules[k] = v
+        if 'subkeys' in v and ('function' in v or 'group' in v):
+           print(f"Warning: parser key {k}: subkeys ignored if function or group already present", file = sys.stderr)
 
     return filtered_rules
+
+def parser_get_funcs_rules(rules, functions_file, funcs_obj):
+    """ Extract functions from a set of rules """
+
+    for k, v, in rules.items():
+        print(f"[parser_get_funcs_rules()]: checking rule {k}", file = sys.stderr)
+
+        if 'function' in v:
+            func = v['function']
+            funcs_obj[func] = load_function_from_file(functions_file, func)
+        if 'rules' in v:
+            parser_get_funcs_rules(v['rules'], functions_file, funcs_obj)
+
 
 def parser_get_funcs(parser, functions_file):
     """ Get the functions to call """
@@ -132,17 +232,7 @@ def parser_get_funcs(parser, functions_file):
     funcs = { }
 
     # go through config, collect the functions to call
-    for k, v in parser['rules'].items():
-
-        if 'function' in v:
-            func = v['function']
-            funcs[func] = load_function_from_file(functions_file, func)
-
-        if 'subkeys' in v:
-            for _, group in v["subkeys"].items():
-                if 'function' in group:
-                    func = group['function']
-                    funcs[func] = load_function_from_file(functions_file, func)
+    parser_get_funcs_rules(parser['rules'], functions_file, funcs)
 
     # preloading the post processing function
     if 'post' in parser and 'function' in config['parser']['post']:
@@ -168,7 +258,7 @@ def new_parser(files, functions_file, config):
                 func = config['parser']['post']['function']
                 parsed = funcs[func](parsed)
             #print(parsed, file = sys.stderr)
-            f.update(parsed)
+            #f.update(parsed)
 
     return files
 
@@ -196,6 +286,20 @@ def replace_nones(d, repl = "???"):
             d[k] = repl
 
     return d
+
+def auto_columns(pflat):
+    """ Get all fields from a list of flattened dictionaries """
+
+    tmp = { }
+    for p in pflat:
+        for k in p.keys():
+            tmp[k] = k
+    columns = [ ]
+
+    for c in tmp.keys():
+        columns.append( { 'header': c, 'contents': '{' + c + '}' } )
+
+    return columns
 
 def extract_all_keys(cols):
     """ Extract all keys from a format dictionary """
@@ -245,8 +349,15 @@ def save_csv(files, file_path, config):
 def make_table(pflat, columns):
     """ Make the table for the output """
 
+    if columns == 'all':
+        columns = auto_columns(pflat)
+
+    print(columns, file = sys.stderr)
     all_fields = extract_all_keys(columns)
     headers = [ v['header'] for v in columns ]
+
+    print(all_fields, file = sys.stderr)
+    print(headers, file = sys.stderr)
 
     # table format string
     table_fmt = '| ' + (" | ").join([ f"{v['contents']}" for v in columns ]) + " |\n"
@@ -327,7 +438,7 @@ def filter_by_condition(files, condition, all_fields):
     # check whether split was effective
 
     if field not in all_fields:
-        print(f"Warning: probably invalid key {key}, ignoring filter `{condition}`", file = sys.stderr)
+        print(f"Warning: probably invalid field {key}, ignoring filter `{condition}`", file = sys.stderr)
         return files
 
     if len(field) == 0 or len(operator) == 0 or len(value) == 0:
@@ -365,8 +476,16 @@ def filter_files(files, pattern_str, all_fields):
 
     return files
 
-def match_replace(match, files, printer, all_fields, func_file):
-    """ Process a match to a moustache and produce replacement """
+def match_replace(match, printer, files, all_fields, func_file):
+    """ 
+    Process a match to a moustache and produce replacement 
+
+    match: the match object
+    printer: dictionary with the printer rules
+    files: list of file dictionaries to process
+    all_fields: set of all fields in the files
+    func_file: file with the functions to call
+    """
 
     m = match.groupdict()
 
@@ -401,8 +520,15 @@ def match_replace(match, files, printer, all_fields, func_file):
         return make_list(files, printer[rule].get('item'))
 
 
-def moustache_replace(printer, cont, files, func_file):
-    """Replace moustache placeholders in a string"""
+def moustache_replace(printer, template, files, func_file):
+    """
+    Replace moustache placeholders in a string
+
+    printer: dictionary with the printer rules
+    template: the string to process
+    files: list of file dictionaries to process
+    func_file: file with the functions to call
+    """
 
     if not printer:
         raise ValueError("No printer section in the config")
@@ -422,9 +548,9 @@ def moustache_replace(printer, cont, files, func_file):
     def replace(match):
         """ function called to process the replacement """
 
-        return match_replace(match, files, printer, all_fields, func_file)
+        return match_replace(match, printer, files, all_fields, func_file)
 
-    ret = re.sub(pattern, replace, cont)
+    ret = re.sub(pattern, replace, template)
 
     return ret
 
@@ -449,22 +575,27 @@ the config files and the template files distributed with this program.
 
     """
     parser = argparse.ArgumentParser(description=description, formatter_class=argparse.RawTextHelpFormatter)
-    parser.add_argument('--format', '-f', help='Output format: template, csv, yaml (default: template)', default = "template")
-    parser.add_argument('--template', '-t', help='Path to the template (default template.md)', default = "template.md")
+    parser.add_argument('--format', '-f', help='Output format: csv, template, yaml (default: csv)', default = "csv")
+    parser.add_argument('--template', '-t', help='Path to the template (required if format is template)')
     parser.add_argument('--list', '-l', help='Path to the file list (text, default None)', default = None)
     parser.add_argument('--yaml', '-y', help='Path to the file list as yaml (default file_list.yaml; use "none" to ignore)', default = "list.yaml")
     parser.add_argument('--output', '-o', help='File to generate (default: stdout)', default = None)
-    parser.add_argument('--config', '-c', help='Config file (default config.yaml)', default = "config.yaml")
+    parser.add_argument('--config', '-c', help='Config file')
     parser.add_argument('--functions', '-F', help='Functions file (default: custom_functions.py)', default = 'custom_functions.py')
 
     args = parser.parse_args()
 
+    if args.format == 'template' and not args.template:
+        print("Template file (option -t) required for template output", file = sys.stderr)
+        sys.exit(1)
+
     yaml_file = args.yaml
     list_file = args.list
 
-    config = yaml_load(args.config)
-    if not config:
-        raise ValueError(f"Cannot parse {args.config}")
+    if not args.config:
+        config = default_config()
+    else:
+        config = yaml_load(args.config)
 
     if not 'parser' in config:
         raise ValueError(f"No parser section in {args.config}")
