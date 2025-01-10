@@ -123,10 +123,6 @@ def process_match(obj, rule, field, funcs, match, blob):
 
     if 'string' in rule:
         cur[field] = rule['string']
-    elif 'rules' in rule:
-        print("   + --- Applying rules", file = sys.stderr)
-        cur[field] = { }
-        apply_rules(cur[field], rule['rules'], funcs = funcs, blob = blob, match = match)
     elif 'function' in rule:
         if match:
             cur[field] = funcs[rule['function']](match)
@@ -138,6 +134,11 @@ def process_match(obj, rule, field, funcs, match, blob):
         else:
             n = len(match.groups())
             cur[field] = match.group(n)
+
+    if 'rules' in rule:
+        print("   + --- Applying rules", file = sys.stderr)
+        cur[field] = { } if cur.get(field) is None else cur[field]
+        apply_rules(cur[field], rule['rules'], funcs = funcs, blob = blob, match = match)
 
     print("   + obj is now: \n", obj, file = sys.stderr)
     return
@@ -162,9 +163,9 @@ def apply_rules(obj, rules, funcs, blob = None, match = None):
 
         if 'regex' not in rule:
             #raise ValueError(f"No regex section in rule {field} of the parser config")
-            print(f"Warning: no regex section in {field} of the parser config", file = sys.stderr)
-            print("calling process_match with None", file = sys.stderr)
-            process_match(obj, rule, field, funcs, None, blob = blob)
+            print(f"Warning: no regex section in rule '{field}' of the parser config", file = sys.stderr)
+            print("calling process_match with match=={mt} and blob=={bt}", file = sys.stderr)
+            process_match(obj, rule, field, funcs, match, blob = blob)
             continue
 
         blob_cur = blob
@@ -255,12 +256,12 @@ def new_parser(files, functions_file, config):
     # go over the files and parse them
     for f in files:
         if 'path' in f:
-            parsed = file_parser(f, funcs, config)
+            file_parser(f, funcs, config)
             if 'post' in config['parser'] and 'function' in config['parser']['post']:
                 func = config['parser']['post']['function']
-                parsed = funcs[func](parsed)
+                post = funcs[func](f)
             #print(parsed, file = sys.stderr)
-            #f.update(parsed)
+            f.update(post)
 
     print("|================|\n|- Parsing done -| \n|================|", file = sys.stderr)
     return files
