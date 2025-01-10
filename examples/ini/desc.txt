@@ -1,0 +1,32 @@
+each rule must be named
+
+Following keywords may be specified in a rule:
+
+regex: this matches the input string (file contents or subgroup in case of
+sub-rules). The match can be used subsequently to specify the value of the
+field, the name of the field, and apply sub-rules to the matched fragments.
+
+key: indicates how the resulting object should be named.
+  if absent, it is the name of the rule. Alternatively, it is the #no of the
+  match group from the regex. this allows to create rules producing multiple
+  key-val pairs by repeatedly matching the same pattern. Use 0 to match the
+  full regex.
+
+group: this is only useful in sub-rules. It indicates the partial match on
+which the rule should act. Therefore, it is possible to use a rule to catch
+a fragment of the file (e.g. a section or a single line), and then apply
+other rules to that fragment. If group is 0, the whole match is used.
+
+The next keys are used to specify the value of the resulting object and one
+of them must be present:
+
+ * string: This sets the value to the given string.
+ * match: this is the number of the group from the regex, in which case
+          the result is a simple key-val pair.
+ * rules: it is a dict containing further rules. Now each rule must have a group as well as a
+          regex key. group indicates the matched fragment which this rule
+          works on. If group is absent, the whole text will be used. Other than that, it has the same syntax (i.e., it can
+          contain the key, value, function and rules keywords).
+ * function: This function will then be
+             called and the result will be inserted into the result under
+             the given field.

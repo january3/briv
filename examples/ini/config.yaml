@@ -1,0 +1,44 @@
+parser:
+  rules:
+    foobar:
+      key: "pipa"
+      function: test_fun
+    sections_keynames:
+      rules:
+        foo:
+          regex: '^\[(.*)\].*\n((([^#;[]+) *= *(\w+))*)'
+          key: 1
+          rules:
+            rul1:
+              group: 2
+              regex: '^([^[\n]+) *= *(.+)$'
+              key: 1
+              string: true
+    sections_contents:
+      rules:
+        section2:
+          regex: '^\[(.*)\].*\n((([^#;[]+) *= *(\w+))*)'
+          key: 1
+          rules:
+            pipka:
+              function: test_fun
+            keyvalrule:
+              group: 2
+              regex: '^([^[\n]+) *= *(.+)$'
+              key: 1
+              match: 2
+            section_id:
+              group: 1
+              regex: '^.*$'
+            section_settings:
+              group: 2
+              regex: '([^#;[]+) *= *(\w+)'
+              rules:
+                keyvalrule:
+                  group: 0
+                  regex: '^([^[\n]+) *= *(.+)$'
+                  key: 1
+                  match: 2
+
+
+
