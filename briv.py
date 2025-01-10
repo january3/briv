@@ -13,10 +13,14 @@ import importlib.util
 def flatfile_load(file_path):
     """Create the dictionary from the flat file, one path per line"""
     
-    with open(file_path) as f:
-        paths = [ f.strip() for f in f.readlines() ]
+    if file_path:
+        with open(file_path) as f:
+            paths = [ f.strip() for f in f.readlines() ]
+    else:
+        # read from stdin
+        paths = [ f.strip() for f in sys.stdin.readlines() ]
 
-    names = [ os.path.basename(os.path.dirname(p)) for p in paths ]
+    names = [ os.path.basename(p) for p in paths ]
 
     ret = [ { 'name': names[i], 'path': paths[i] } for i in range(len(paths)) ]
 
@@ -31,7 +35,7 @@ def default_config():
                     'default': {
                         'regex': r"^([^:=]*) *[:=] *(.*)$",
                         'key': 1,
-                        'value': 2
+                        'match': 2
                         }
                     }
                 }
@@ -86,77 +90,75 @@ def parse_field(ret, field):
 
     return cur, field
 
+def process_match_keyword(match, match_rule):
+    """ Process the 'match' keyword """
+
+    if isinstance(match_rule, int):
+        return match.group(match_rule)
+
+    if not isinstance(match_rule, dict):
+        raise ValueError(f"Invalid match rule: {match_rule}")
+
+    ret = { }
+
+    for k, v in match_rule.items():
+        ret[k] = match.group(v)
+
+    return ret
+
 def process_match(obj, rule, field, funcs, match, blob):
     """ apply a rule to a blob of text """
 
-    print(f" --- processing rule {rule} for field {field}", file = sys.stderr)
+    print(f" > --- processing rule {rule} for field {field}", file = sys.stderr)
 
     if not match:
         print(f"Warning: no match for rule", file = sys.stderr)
 
     if match and 'key' in rule:
-        print(f" --- setting key to match.group({rule['key']}) = {match.group(rule['key'])}", file = sys.stderr)
+        print(f"   --- setting key to match.group({rule['key']}) = {match.group(rule['key'])}", file = sys.stderr)
         field = match.group(rule['key'])
 
     # convert a_b_c into [a][b][c]... structure
-    # XXX this can cause problems...
     cur, field = parse_field(obj, field)
 
     if 'string' in rule:
         cur[field] = rule['string']
-        return
-
-    # simple flat key
-    if match and 'match' in rule:
-        cur[field] = match.group(rule['match'])
-        print(f"Setting {field} to {cur[field]}", file = sys.stderr)
-        return
-
-    if 'rules' in rule:
-        print("!!!Applying rules", file = sys.stderr)
+    elif 'rules' in rule:
+        print("   + --- Applying rules", file = sys.stderr)
         cur[field] = { }
         apply_rules(cur[field], rule['rules'], funcs = funcs, blob = blob, match = match)
-        print("!!!cur is now: ", cur, file = sys.stderr)
-        return
-
-    if 'function' in rule:
+    elif 'function' in rule:
         if match:
             cur[field] = funcs[rule['function']](match)
         else:
             cur[field] = funcs[rule['function']](blob)
-        return
+    elif match:
+        if 'match' in rule:
+            cur[field] = process_match_keyword(match, rule['match'])
+        else:
+            n = len(match.groups())
+            cur[field] = match.group(n)
 
-    if match:
-        print(" --- setting field to match.group(0)", file = sys.stderr)
-        cur[field] = match.group(0)
-        return
-
-
-#   # multiple subkeys
-#   if 'subkeys' in rule:
-#       if field not in ret:
-#           ret[field] = { }
-#       for subkey, subkey_group in rule['subkeys'].items():
-#           if 'function' in subkey_group:
-#               ret[field][subkey] = funcs[subkey_group['function']](match)
-#           elif 'group' in subkey_group:
-#               ret[field][subkey] = match.group(subkey_group['group'])
-#
-    print("!!! obj is now: ", obj, file = sys.stderr)
+    print("   + obj is now: \n", obj, file = sys.stderr)
     return
 
 def apply_rules(obj, rules, funcs, blob = None, match = None):
     """ applies a set of rules to a blob of text """
 
-
     if blob is None and match is None:
-        print("apply_rules(): No blob or match provided", file = sys.stderr)
+        print("!!! apply_rules(): No blob or match provided ==================<<<<<", file = sys.stderr)
         #raise ValueError("apply_rules(): No blob or match provided")
 
     # apply the rules
     for field, rule in rules.items():
+        bt, mt = blob is not None, match is not None
 
-        print(f'Processing rule named "{field}" rule:\n{rule}', file = sys.stderr)
+        print(f'=== Processing rule named "{field}" ===', file = sys.stderr)
+        print(f'    blob: {bt}, match: {mt}', file = sys.stderr)
+
+        if isinstance(rule, str):
+            # rule *is* the regex
+            rule = { 'regex': rule }
 
         if 'regex' not in rule:
             #raise ValueError(f"No regex section in rule {field} of the parser config")
@@ -169,15 +171,15 @@ def apply_rules(obj, rules, funcs, blob = None, match = None):
 
         # for sub-rules, use the appropriate blob
         if match:
-            print(f"match is {match}", file = sys.stderr)
+            print(f"= match is {match}", file = sys.stderr)
             if 'group' not in rule:
                 raise ValueError(f"No group section in rule {field} of the parser config")
             blob_cur = match.group(rule['group'])
-            print(f" + blob is now {blob}", file = sys.stderr)
+            print(f"= + blob is now {blob_cur}", file = sys.stderr)
 
         for curmatch in re.finditer(rule['regex'], blob_cur, flags = re.MULTILINE):
-            print(f" + Match found for {field}", file = sys.stderr)
-            print(f" + Match groups: {curmatch.groups()}", file = sys.stderr)
+            print(f"= + Match found for {field}", file = sys.stderr)
+            print(f"= + Match groups: {curmatch.groups()}", file = sys.stderr)
             process_match(obj, rule, field, funcs, match = curmatch, blob = None)
 
     return
@@ -187,7 +189,7 @@ def file_parser(obj, funcs, config):
     """ parse a single file """
 
     file_path = obj['path']
-    print(f"Parsing file {file_path}", file = sys.stderr)
+    print(f"|----------------|\n|- Parsing file -| {file_path}\n|----------------|", file = sys.stderr)
 
     # read the file to be parsed
     with open(file_path, 'r') as stream:
@@ -260,6 +262,7 @@ def new_parser(files, functions_file, config):
             #print(parsed, file = sys.stderr)
             #f.update(parsed)
 
+    print("|================|\n|- Parsing done -| \n|================|", file = sys.stderr)
     return files
 
 # ------------------ Export functions ------------------
@@ -575,7 +578,7 @@ the config files and the template files distributed with this program.
 
     """
     parser = argparse.ArgumentParser(description=description, formatter_class=argparse.RawTextHelpFormatter)
-    parser.add_argument('--format', '-f', help='Output format: csv, template, yaml (default: csv)', default = "csv")
+    parser.add_argument('--format', '-f', help='Output format: csv, template, yaml (default: yaml)', default = "yaml")
     parser.add_argument('--template', '-t', help='Path to the template (required if format is template)')
     parser.add_argument('--list', '-l', help='Path to the file list (text, default None)', default = None)
     parser.add_argument('--yaml', '-y', help='Path to the file list as yaml (default file_list.yaml; use "none" to ignore)', default = "list.yaml")
@@ -600,14 +603,30 @@ the config files and the template files distributed with this program.
     if not 'parser' in config:
         raise ValueError(f"No parser section in {args.config}")
 
-    if not os.path.exists(yaml_file) and not (list_file and os.path.exists(list_file)):
-        print(f"Neither {yaml_file} nor {list_file} found", file = sys.stderr)
-        sys.exit(1)
-
     # Load the file list file
     files = [ ]
-    files += flatfile_load(args.list) if args.list and os.path.exists(args.list) else [ ]
+
+    if not yaml_file and not list_file:
+        print(f"Neither yaml_file nor list_file provided", file = sys.stderr)
+        sys.exit(1)
+
+    if args.list == '-':
+        print("Reading from stdin", file = sys.stderr)
+        files += flatfile_load(None)
+        print(f"Read {len(files)} files from stdin", file = sys.stderr)
+    elif args.list:
+        if os.path.exists(args.list):
+            files += flatfile_load(args.list)
+            print(f"Read {len(files)} files from {args.list}", file = sys.stderr)
+        else:
+            print(f"List file {args.list} not found", file = sys.stderr)
+            sys.exit(1)
+
     files += yaml_load(args.yaml)['files'] if args.yaml.lower() != "none" and os.path.exists(args.yaml) else [ ]
+
+    if len(files) == 0:
+        print(f"No files paths read, check options -y or -l", file = sys.stderr)
+        sys.exit(1)
 
     # get the real paths of the files
     files = realpaths(files)
