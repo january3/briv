@@ -1,5 +1,18 @@
 each rule must be named
 
+The rule might either contain a regex or another dictionary.
+
+If the rule simply consists of a regex, then the rule will apply the regex
+to the input and use the value of the first match group as the value of the
+resulting object. The name of the resulting object will be the name of the
+rule. Example:
+
+```yaml
+parser:
+  rules:
+    name: '^name: (\w+)$'
+```
+
 Following keywords may be specified in a rule:
 
 regex: this matches the input string (file contents or subgroup in case of
@@ -22,7 +35,24 @@ of them must be present:
 
  * string: This sets the value to the given string.
  * match: this is the number of the group from the regex, in which case
-          the result is a simple key-val pair.
+          the result is a simple key-val pair. OR it is a dict, in which
+          case the result is a dict. The dict must only contain keys and
+          group numbers, and the keys will be assigned the values of the
+          corresponding groups.
+Example:
+
+```yaml
+parser:
+  rules:
+    website: '^url: (https://([^/\n]+)(.+))$'
+    match:
+      url: 1
+      domain: 2
+      relative: 3
+```
+
+F
+
  * rules: it is a dict containing further rules. Now each rule must have a group as well as a
           regex key. group indicates the matched fragment which this rule
           works on. If group is absent, the whole text will be used. Other than that, it has the same syntax (i.e., it can

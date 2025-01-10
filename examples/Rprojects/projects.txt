@@ -1,5 +1,3 @@
-/home/january/Projects/R/plotwidgets/plotwidgets/DESCRIPTION
-/home/january/Projects/R/disco/disco/DESCRIPTION
-/home/january/Projects/R/tagcloud/tagcloud/DESCRIPTION
-/home/january/Projects/R/bioshmods/bioshmods/DESCRIPTION
-/home/january/Projects/R/colorDF/colorDF/DESCRIPTION
+bioshmods
+colorDF
+tagcloud

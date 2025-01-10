@@ -1,24 +1,18 @@
 parser:
   rules: 
-    package:
-      regex: 'Package: (.+)'
-      group: 1
-    version:
-      regex: 'Version: (.+)'
-      group: 1
-    title:
-      regex: 'Title: (.+)'
-      group: 1
-    url:
-      regex: 'URL: (.+)'
-      group: 1
+    default:
+      regex: '^(\w[\w\d-]*):\s*(.*(?:\n\s+.*)*)'
+      #regex: '^(\w[\w\d-]*):\s*(.*)$'
+      key: 1
+      match: 2
+    websites:
+      regex: '^URL: (.*)$'
+      rules:
+        url:
+          regex: '^(https?://[^\s,]+)'
+          group: 1
+          match: 1
 printer:
   package_table:
     style: 'table'
-    columns:
-      - header: 'Package'
-        contents: '{package}'
-      - header: 'Version'
-        contents: '{version}'
-      - header: 'Short description'
-        contents: '{title}'
+    columns: all
