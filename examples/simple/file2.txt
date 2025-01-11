@@ -1,0 +1,3 @@
+name: training
+description: The training project
+url: https://example.com/training

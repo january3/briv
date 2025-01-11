@@ -1,0 +1,27 @@
+# basic example of a parser configuration file
+parser:
+  rules:
+    # the title rule becomes the key in the resulting
+    # dictionary
+    title:
+      # the regex to match
+      regex: '^name: (\w+)$'
+      # which group in the regex to use as the value
+      match: 1
+    description:
+      regex: '^description: (.+)$'
+      match: 1
+    # there is a better way to do this, all in one go!
+    # see the file config_alt.yaml
+    website_url:
+      regex: '^url: (.+)$'
+      match: 1
+    website_name:
+      # last part of the URL
+      regex: '^url: .+\/(.+)$'
+      match: 1
+    website_server:
+      regex: '^url: https?://([^/\n]+).*$'
+      match: 1
+          
+    

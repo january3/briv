@@ -1,0 +1,24 @@
+# a simple example of a parser configuration file
+
+parser:
+  rules:
+    # simplest way a rule can be defined:
+    # just give the regex. The key will be defined by the rules name – in
+    # this case, 'title'. The last group in the regex will be used as the
+    # value.
+    title: '^name: (\w+)$'
+    description: '^description: (.+)$'
+
+
+    # here we have a regex with multiple groups and a match keyword which
+    # assigns them to different keys. This will result in a dictionary with 
+    # website['url'], website['server'] and website['name'] keys; and if
+    # you export to CSV, the columns will be website_url, website_server and
+    # website_name. 
+    website:
+      regex: '^url: (https?://([^\n/]+)/?(.*))$'
+      match:
+        # If you want to use the whole regex, use 0.
+        url: 1
+        server: 2
+        name: 3

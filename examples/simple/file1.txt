@@ -1,0 +1,3 @@
+name: testing
+description: first testing project
+url: https://example.com/testing
