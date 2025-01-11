@@ -242,9 +242,15 @@ def parser_get_funcs(parser, functions_file):
     parser_get_funcs_rules(parser['rules'], functions_file, funcs)
 
     # preloading the post processing function
-    if 'post' in parser and 'function' in config['parser']['post']:
-        func = parser['post']['function']
-        funcs[func] = load_function_from_file(functions_file, func)
+    if 'post_file' in parser: 
+        for func in parser['post_file']:
+            f = func['function']
+            funcs[f] = load_function_from_file(functions_file, f)
+
+    if 'post_parser' in parser: 
+        for func in parser['post_parser']:
+            f = func['function']
+            funcs[f] = load_function_from_file(functions_file, f)
 
     return funcs
 
@@ -263,13 +269,25 @@ def new_parser(files, functions_file, config):
         f = files[i]
         if 'path' in f:
             file_parser(f, funcs, config)
-            if 'post' in config['parser'] and 'function' in config['parser']['post']:
-                func = config['parser']['post']['function']
-                post = funcs[func](f)
-                files[i] = post
-            #print(parsed, file = sys.stderr)
+            if 'post_file' in config['parser']: 
+                for post in config['parser']['post_file']:
+                    func_name = post['function']
+                    print(f"Calling post function {func_name}", file = sys.stderr)
+                    args = post['args'] if 'args' in post else [ ]
+                    kwargs = post['kwargs'] if 'kwargs' in post else { }
+                    ret = funcs[func_name](f, *args, **kwargs)
+                    files[i] = ret
 
     print("|================|\n|- Parsing done -| \n|================|", file = sys.stderr)
+
+    if 'post_parser' in config['parser']:
+        for post in config['parser']['post_parser']:
+            func_name = post['function']
+            print(f"Calling post parser function {func_name}", file = sys.stderr)
+            args = post['args'] if 'args' in post else [ ]
+            kwargs = post['kwargs'] if 'kwargs' in post else { }
+            files = funcs[func_name](files, *args, **kwargs)
+
     return files
 
 # ------------------ Export functions ------------------
