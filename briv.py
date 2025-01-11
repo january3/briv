@@ -466,7 +466,7 @@ def filter_by_condition(files, condition, all_fields):
     # check whether split was effective
 
     if field not in all_fields:
-        print(f"Warning: probably invalid field {key}, ignoring filter `{condition}`", file = sys.stderr)
+        print(f"Warning: probably invalid field {field}, ignoring filter `{condition}`", file = sys.stderr)
         return files
 
     if len(field) == 0 or len(operator) == 0 or len(value) == 0:
