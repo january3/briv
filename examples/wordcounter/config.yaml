@@ -1,0 +1,29 @@
+parser:
+  # example of a post-processing function called after all files have been processed.
+  # In this case, it removes the recorded words that do not have a
+  # enough of total ocurrances.
+  # The first argument is the list of files processed (a list of dicts with
+  # matches). The second argument we specify via kwargs.
+  post_parser:
+    - function: filter_by_total_number
+      kwargs: 
+        min_n: 3
+
+  # example of a post-processing function called after each file processed.
+  # It removes words that are shorter than a given length.
+  # The first argument is the file processed (a dict with processed
+  # matches). The second argument we specify via kwargs.
+  post_file:
+    - function: remove_short_words
+      kwargs: 
+        min_len: 5
+
+  # example of a very simple rule that is used for counting. The regex
+  # matches only word characters. `key: 0` means that the whole match is
+  # used as the resulting key in the dict. `count: True` means that the
+  # the value becomes the total number of matches found for this key.
+  rules:
+    rule1:
+      regex: '\w+'
+      key: 0
+      count: True
