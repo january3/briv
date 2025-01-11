@@ -504,6 +504,20 @@ def filter_files(files, pattern_str, all_fields):
 
     return files
 
+def sort_files(files, sort, desc, all_fields):
+    """Sort the files by a field"""
+
+    if not sort in all_fields:
+        print(f"Warning: probably invalid field {sort}, ignoring sort", file = sys.stderr)
+        return files
+
+    files = sorted(files, key = lambda x: x.get(sort))
+
+    if desc:
+        files.reverse()
+
+    return files
+
 def match_replace(match, printer, files, all_fields, func_file):
     """ 
     Process a match to a moustache and produce replacement 
@@ -534,13 +548,10 @@ def match_replace(match, printer, files, all_fields, func_file):
         return func(files, params)
 
     if filt:
-        files = filter_files(files, m['filter'], all_fields)
+        files = filter_files(files, filt, all_fields)
 
     if sort:
-        files = sorted(files, key = lambda x: x.get(sort))
-
-        if desc:
-            files.reverse()
+        files = sort_files(files, sort, desc, all_fields)
 
     if print_style == "table":
         return make_table(files, printer[rule].get('columns'))
@@ -604,7 +615,7 @@ the config files and the template files distributed with this program.
     """
     parser = argparse.ArgumentParser(description=description, formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument('--format', '-f', help='Output format: csv, template, yaml (default: yaml)', default = "yaml")
-    parser.add_argument('--template', '-t', help='Path to the template (required if format is template)')
+    parser.add_argument('--template', '-t', help='Path to the template (required if format is template; implies format=template)', default = None)
     parser.add_argument('--list', '-l', help='Path to the file list (text, default None)', default = None)
     parser.add_argument('--yaml', '-y', help='Path to the file list as yaml (default file_list.yaml; use "none" to ignore)', default = "list.yaml")
     parser.add_argument('--output', '-o', help='File to generate (default: stdout)', default = None)
@@ -616,6 +627,9 @@ the config files and the template files distributed with this program.
     if args.format == 'template' and not args.template:
         print("Template file (option -t) required for template output", file = sys.stderr)
         sys.exit(1)
+
+    if args.template:
+        args.format = 'template'
 
     yaml_file = args.yaml
     list_file = args.list

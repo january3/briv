@@ -1,1 +1,1 @@
-briv -c config.yaml -l list.txt
+briv.py -c config.yaml -l list.txt

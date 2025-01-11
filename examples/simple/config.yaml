@@ -1,4 +1,4 @@
-# basic example of a parser configuration file
+# basic example of a parser and printer configuration file
 parser:
   rules:
     # the title rule becomes the key in the resulting
@@ -24,4 +24,28 @@ parser:
       regex: '^url: https?://([^/\n]+).*$'
       match: 1
           
-    
+# printer configures the fields to print in the (markdown) template.
+# each entry can then be used in the double moustache syntax {{}}
+# see the file template.md for an example
+# to access multilevel fields, such as website -> url, use the 
+# underscores to separate the levels, e.g. website_url
+printer:
+  tabular_output_example:
+    style: table
+    columns:
+      - header: Title
+        contents: '[{title}]({website_url})'
+      - header: Description
+        contents: '{description}'
+  list_output_example:
+    style: list
+    item: |
+
+      ## Project {title}
+
+       * Title: {title}
+       * Description: {description}
+       * Website Name: {website_name}
+       * Website Server: {website_server}
+       * Website URL: [{website_url}]({website_url})
+       
