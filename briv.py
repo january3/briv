@@ -39,7 +39,17 @@ def default_config():
                         'match': 2
                         }
                     }
-                }
+                },
+            'printer': {
+                'default': {
+                    'style': 'table_md',
+                    'columns': 'all'
+                    },
+                'TABLE': {
+                    'style': 'table_md',
+                    'columns': 'all'
+                    }
+             }
             }
 
     return config
@@ -201,7 +211,7 @@ def apply_rules(obj, rules, funcs, blob = None, match = None):
     return
 
 
-def file_parser(obj, funcs, config):
+def file_parser(obj, config):
     """ parse a single file """
 
     file_path = obj['path']
@@ -212,7 +222,7 @@ def file_parser(obj, funcs, config):
         blob = stream.read()
 
     logger.debug(f"Calling apply_rules with obj={obj}")
-    apply_rules(obj, config['parser']['rules'], funcs = funcs, blob = blob)
+    apply_rules(obj, config['parser']['rules'], funcs = config['funcs'], blob = blob)
 
     logger.debug("[file_parser()] ret is now", obj)
     return
@@ -272,22 +282,22 @@ def new_parser(files, functions_file, config):
     # checking the parser definition
     config['parser']['rules'] = parser_check_rules(config['parser']['rules'])
 
-    funcs = parser_get_funcs(config['parser'], functions_file)
-    logger.debug("Functions:", funcs)
+    config['funcs'] = parser_get_funcs(config['parser'], functions_file)
+    logger.debug("Functions:", config['funcs'])
 
     # go over the files and parse them
     
     for i in range(len(files)):
         f = files[i]
         if 'path' in f:
-            file_parser(f, funcs, config)
+            file_parser(f, config)
             if 'post_file' in config['parser']: 
                 for post in config['parser']['post_file']:
                     func_name = post['function']
                     logger.debug(f"Calling post function {func_name}")
                     args = post['args'] if 'args' in post else [ ]
                     kwargs = post['kwargs'] if 'kwargs' in post else { }
-                    ret = funcs[func_name](f, *args, **kwargs)
+                    ret = config['funcs'][func_name](f, *args, **kwargs)
                     files[i] = ret
 
     logger.debug("\n  |================|\n  |- Parsing done -| \n  |================|")
@@ -298,7 +308,7 @@ def new_parser(files, functions_file, config):
             logger.debug(f"Calling post parser function {func_name}")
             args = post['args'] if 'args' in post else [ ]
             kwargs = post['kwargs'] if 'kwargs' in post else { }
-            files = funcs[func_name](files, *args, **kwargs)
+            files = config['funcs'][func_name](files, *args, **kwargs)
 
     return files
 
@@ -633,7 +643,7 @@ the config files and the template files distributed with this program.
     parser.add_argument('--list', '-l', help='Path to the file list (text, default None)', default = None)
     parser.add_argument('--yaml', '-y', help='Path to the file list as yaml (default file_list.yaml; use "none" to ignore)', default = "list.yaml")
     parser.add_argument('--output', '-o', help='File to generate (default: stdout)', default = None)
-    parser.add_argument('--config', '-c', help='Config file')
+    parser.add_argument('--config', '-c', help='Config file in yaml format')
     parser.add_argument('--functions', '-F', help='Functions file (default: custom_functions.py)', default = 'custom_functions.py')
     parser.add_argument('--debug', '-d', help='Debug mode', action = 'store_true', default = False)
 
