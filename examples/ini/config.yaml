@@ -1,44 +1,79 @@
+# Example for multiple levels of rules for parsing structured input.
+# we are processing here an ini file which is split into sections.
+# see file test.ini for example of input file.
+#
+# [section1]
+# key1=value1
+# key2=value2
+#
+# # comment
+#
+# [section2]
+# key3=value3
+# key4=value4
 parser:
   rules:
-    foobar:
-      key: "pipa"
-      function: test_fun
-    sections_keynames:
+    # first rule is for only recording keys present in sections
+    # basically for the sake of demonstration
+    # The rule does not contain a regex, so it will pass the full contents
+    # of the file to the next level of rules.
+    Keynames:
+      # here is the next level of rules
       rules:
-        foo:
+        # this rule is for finding sections. It matches the section name
+        # which is then used as keyword. The second group matches the
+        # remainder of the section including all key-value pairs.
+        Find_sections:
+          # regex to find full sections
           regex: '^\[(.*)\].*\n((([^#;[]+) *= *(\w+))*)'
           key: 1
+          # final level of rules. Here we are only matching to the contents
+          # of the section, line by line (hence ^ ... $ in the regex).
+          # The group: 2 line means that we apply the rule to the second
+          # group of the regex from rule Find_sections, which is the
+          # contents of the section.
+          # On each line, we try to find a 'key = value' pair.
           rules:
-            rul1:
+            Keyrule:
               group: 2
               regex: '^([^[\n]+) *= *(.+)$'
               key: 1
+              # whatever the value for the key is, we are simply matching
+              # inserting "true" as the value
               string: true
-    sections_contents:
+    # This rule, Contents, captures also the values of the keys. This is
+    # basically the only real difference.
+    Contents:
       rules:
-        section2:
+        # same rule as in the rule Keynames
+        Find_sections:
           regex: '^\[(.*)\].*\n((([^#;[]+) *= *(\w+))*)'
           key: 1
           rules:
-            pipka:
+            # as a gimmick, we define a function that will be called with
+            # the whole match from Find_sections regex. The function is a
+            # dummy and always returns the same text, but it could do
+            # something useful.
+            Foobar:
               function: test_fun
-            keyvalrule:
+            # similar rule as the Keyrule above, but now we capture the
+            # second group and insert it as value (hence "match: 2").
+            # since the name of the section contains two underscores, only
+            # the last part of the name will be replaced by the first group
+            # from regex. So for example if the pattern matches
+            # "key1=value1", the resulting key will be
+            # Section_Settings_key1. Just look at the output to see what I
+            # mean.
+            Section_Settings_Keyrule:
               group: 2
               regex: '^([^[\n]+) *= *(.+)$'
               key: 1
               match: 2
-            section_id:
+            # In the next two rules, we create a dict with the key Section
+            # containing Id (with the section name) and settings (with the
+            # key-value pairs.
+            Section_Id:
               group: 1
               regex: '^.*$'
-            section_settings:
-              group: 2
-              regex: '([^#;[]+) *= *(\w+)'
-              rules:
-                keyvalrule:
-                  group: 0
-                  regex: '^([^[\n]+) *= *(.+)$'
-                  key: 1
-                  match: 2
-
 
 
