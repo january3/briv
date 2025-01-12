@@ -550,7 +550,7 @@ def match_replace(match, printer, files, all_fields, func_file):
     sort = m['sort'].strip() if m['sort'] else None
     desc = True if m['desc'] else False
 
-    print_style = printer[rule].get('style', 'table')
+    print_style = printer[rule].get('style', 'table_md')
 
     if print_style == "function":
         func = printer[rule].get('function')
@@ -565,10 +565,12 @@ def match_replace(match, printer, files, all_fields, func_file):
     if sort:
         files = sort_files(files, sort, desc, all_fields)
 
-    if print_style == "table":
+    if print_style == "table_md":
         return make_table(files, printer[rule].get('columns'))
     elif print_style == "list":
         return make_list(files, printer[rule].get('item'))
+    else:
+        raise ValueError(f"Unsupported print style: {print_style}") 
 
 
 def moustache_replace(printer, template, files, func_file):
