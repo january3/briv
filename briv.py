@@ -9,6 +9,7 @@ import csv
 import argparse
 import hashlib
 import importlib.util
+import logging
 
 def flatfile_load(file_path):
     """Create the dictionary from the flat file, one path per line"""
@@ -58,7 +59,7 @@ def read_template(file_path):
 def load_function_from_file(file_path, function_name):
     """ Dyna load function from file """
 
-    print(f"loading function: {function_name} from {file_path}", file = sys.stderr)
+    logger.debug(f"loading function: {function_name} from {file_path}")
     spec = importlib.util.spec_from_file_location("custom_functions", file_path)
     module = importlib.util.module_from_spec(spec)
 
@@ -66,7 +67,7 @@ def load_function_from_file(file_path, function_name):
         spec.loader.exec_module(module)
         return getattr(module, function_name)
     except Exception as e:
-        print(f"Error loading function '{function_name}' from {file_path}: {e}", file=sys.stderr)
+        logger.debug(f"Error loading function '{function_name}' from {file_path}: {e}")
         sys.exit(1)
 
 def parse_field(ret, field):
@@ -109,17 +110,25 @@ def process_match_keyword(match, match_rule):
 def process_match(obj, rule, field, funcs, match, blob):
     """ apply a rule to a blob of text """
 
-    print(f" > --- processing rule {rule} for field {field}", file = sys.stderr)
+    logger.debug(f" > --- processing rule {rule} for field {field}")
 
     if not match:
-        print(f"Warning: no match for rule", file = sys.stderr)
-
-    if match and 'key' in rule:
-        print(f"   --- setting key to match.group({rule['key']}) = {match.group(rule['key'])}", file = sys.stderr)
-        field = match.group(rule['key'])
+        logger.debug(f"Warning: no match for rule")
 
     # convert a_b_c into [a][b][c]... structure
     cur, field = parse_field(obj, field)
+
+    if match and 'key' in rule:
+        logger.debug(f"   --- setting key to match.group({rule['key']}) = {match.group(rule['key'])}")
+        field = match.group(rule['key'])
+
+    # rules trump everything and exclude any other processing
+    if 'rules' in rule:
+        logger.debug("   + --- Applying rules")
+        cur[field] = { } if cur.get(field) is None else cur[field]
+        logger.debug(f"Calling apply_rules with cur[field]={cur[field]}")
+        apply_rules(cur[field], rule['rules'], funcs = funcs, blob = blob, match = match)
+        return
 
     if 'string' in rule:
         cur[field] = rule['string']
@@ -129,7 +138,13 @@ def process_match(obj, rule, field, funcs, match, blob):
         cur[field] += 1
     elif 'function' in rule:
         if match:
-            cur[field] = funcs[rule['function']](match)
+            logger.debug(f"Field: {field}")
+            logger.debug(f"Match groups: {match.groups()}")
+            logger.debug(f"Function: {rule['function']}")
+            tmp = funcs[rule['function']](match)
+            logger.debug(f"Function result: {tmp}")
+            logger.debug(f"cur: {cur}")
+            cur[field] = tmp
         else:
             cur[field] = funcs[rule['function']](blob)
     elif match:
@@ -139,27 +154,22 @@ def process_match(obj, rule, field, funcs, match, blob):
             n = len(match.groups())
             cur[field] = match.group(n)
 
-    if 'rules' in rule:
-        print("   + --- Applying rules", file = sys.stderr)
-        cur[field] = { } if cur.get(field) is None else cur[field]
-        apply_rules(cur[field], rule['rules'], funcs = funcs, blob = blob, match = match)
-
-    print("   + obj is now: \n", obj, file = sys.stderr)
+    logger.debug("   + obj is now: \n", obj)
     return
 
 def apply_rules(obj, rules, funcs, blob = None, match = None):
     """ applies a set of rules to a blob of text """
 
     if blob is None and match is None:
-        print("!!! apply_rules(): No blob or match provided ==================<<<<<", file = sys.stderr)
+        logger.debug("!!! apply_rules(): No blob or match provided ==================<<<<<")
         #raise ValueError("apply_rules(): No blob or match provided")
 
     # apply the rules
     for field, rule in rules.items():
         bt, mt = blob is not None, match is not None
 
-        print(f'=== Processing rule named "{field}" ===', file = sys.stderr)
-        print(f'    blob: {bt}, match: {mt}', file = sys.stderr)
+        logger.debug(f'=== Processing rule named "{field}" ===')
+        logger.debug(f'    blob: {bt}, match: {mt}')
 
         if isinstance(rule, str):
             # rule *is* the regex
@@ -167,8 +177,8 @@ def apply_rules(obj, rules, funcs, blob = None, match = None):
 
         if 'regex' not in rule:
             #raise ValueError(f"No regex section in rule {field} of the parser config")
-            print(f"Warning: no regex section in rule '{field}' of the parser config", file = sys.stderr)
-            print("calling process_match with match=={mt} and blob=={bt}", file = sys.stderr)
+            logger.debug(f"Warning: no regex section in rule '{field}' of the parser config")
+            logger.debug(f"calling process_match with obj={obj}, match=={mt} and blob=={bt}")
             process_match(obj, rule, field, funcs, match, blob = blob)
             continue
 
@@ -176,15 +186,16 @@ def apply_rules(obj, rules, funcs, blob = None, match = None):
 
         # for sub-rules, use the appropriate blob
         if match:
-            print(f"= match is {match}", file = sys.stderr)
+            logger.debug(f"= match is {match}")
             if 'group' not in rule:
                 raise ValueError(f"No group section in rule {field} of the parser config")
             blob_cur = match.group(rule['group'])
-            print(f"= + blob is now {blob_cur}", file = sys.stderr)
+            logger.debug(f"= + blob is now {blob_cur}")
 
         for curmatch in re.finditer(rule['regex'], blob_cur, flags = re.MULTILINE):
-            print(f"= + Match found for {field}", file = sys.stderr)
-            print(f"= + Match groups: {curmatch.groups()}", file = sys.stderr)
+            logger.debug(f"= + Match found for {field}")
+            logger.debug(f"= + Match groups: {curmatch.groups()}")
+            logger.debug(f"calling process_match with obj={obj}")
             process_match(obj, rule, field, funcs, match = curmatch, blob = None)
 
     return
@@ -194,15 +205,16 @@ def file_parser(obj, funcs, config):
     """ parse a single file """
 
     file_path = obj['path']
-    print(f"|----------------|\n|- Parsing file -| {file_path}\n|----------------|", file = sys.stderr)
+    logger.debug(f"\n  |----------------|\n  |- Parsing file -| {file_path}\n  |----------------|")
 
     # read the file to be parsed
     with open(file_path, 'r') as stream:
         blob = stream.read()
 
+    logger.debug(f"Calling apply_rules with obj={obj}")
     apply_rules(obj, config['parser']['rules'], funcs = funcs, blob = blob)
 
-    print("[file_parser()] ret is now", obj, file = sys.stderr)
+    logger.debug("[file_parser()] ret is now", obj)
     return
 
 def parser_check_rules(rules):
@@ -212,10 +224,10 @@ def parser_check_rules(rules):
 
     for k, v in rules.items():
         if 'regex' not in v:
-            print(f"Warning: no regex section in {k} of the parser config", file = sys.stderr)
+            logger.debug(f"Warning: no regex section in {k} of the parser config")
         filtered_rules[k] = v
         if 'subkeys' in v and ('function' in v or 'group' in v):
-           print(f"Warning: parser key {k}: subkeys ignored if function or group already present", file = sys.stderr)
+           logger.debug(f"Warning: parser key {k}: subkeys ignored if function or group already present")
 
     return filtered_rules
 
@@ -223,7 +235,7 @@ def parser_get_funcs_rules(rules, functions_file, funcs_obj):
     """ Extract functions from a set of rules """
 
     for k, v, in rules.items():
-        print(f"[parser_get_funcs_rules()]: checking rule {k}", file = sys.stderr)
+        logger.debug(f"[parser_get_funcs_rules()]: checking rule {k}")
 
         if 'function' in v:
             func = v['function']
@@ -261,7 +273,7 @@ def new_parser(files, functions_file, config):
     config['parser']['rules'] = parser_check_rules(config['parser']['rules'])
 
     funcs = parser_get_funcs(config['parser'], functions_file)
-    print("Functions:", funcs, file = sys.stderr)
+    logger.debug("Functions:", funcs)
 
     # go over the files and parse them
     
@@ -272,18 +284,18 @@ def new_parser(files, functions_file, config):
             if 'post_file' in config['parser']: 
                 for post in config['parser']['post_file']:
                     func_name = post['function']
-                    print(f"Calling post function {func_name}", file = sys.stderr)
+                    logger.debug(f"Calling post function {func_name}")
                     args = post['args'] if 'args' in post else [ ]
                     kwargs = post['kwargs'] if 'kwargs' in post else { }
                     ret = funcs[func_name](f, *args, **kwargs)
                     files[i] = ret
 
-    print("|================|\n|- Parsing done -| \n|================|", file = sys.stderr)
+    logger.debug("\n  |================|\n  |- Parsing done -| \n  |================|")
 
     if 'post_parser' in config['parser']:
         for post in config['parser']['post_parser']:
             func_name = post['function']
-            print(f"Calling post parser function {func_name}", file = sys.stderr)
+            logger.debug(f"Calling post parser function {func_name}")
             args = post['args'] if 'args' in post else [ ]
             kwargs = post['kwargs'] if 'kwargs' in post else { }
             files = funcs[func_name](files, *args, **kwargs)
@@ -380,12 +392,12 @@ def make_table(pflat, columns):
     if columns == 'all':
         columns = auto_columns(pflat)
 
-    print(columns, file = sys.stderr)
+    logger.debug(columns)
     all_fields = extract_all_keys(columns)
     headers = [ v['header'] for v in columns ]
 
-    print(all_fields, file = sys.stderr)
-    print(headers, file = sys.stderr)
+    logger.debug(all_fields)
+    logger.debug(headers)
 
     # table format string
     table_fmt = '| ' + (" | ").join([ f"{v['contents']}" for v in columns ]) + " |\n"
@@ -466,11 +478,11 @@ def filter_by_condition(files, condition, all_fields):
     # check whether split was effective
 
     if field not in all_fields:
-        print(f"Warning: probably invalid field {field}, ignoring filter `{condition}`", file = sys.stderr)
+        logger.debug(f"Warning: probably invalid field {field}, ignoring filter `{condition}`")
         return files
 
     if len(field) == 0 or len(operator) == 0 or len(value) == 0:
-        print(f"Invalid condition {condition}", file = sys.stderr)
+        logger.debug(f"Invalid condition {condition}")
         return files
 
     value = int(value) if value.isdigit() else value.strip('"')
@@ -508,7 +520,7 @@ def sort_files(files, sort, desc, all_fields):
     """Sort the files by a field"""
 
     if not sort in all_fields:
-        print(f"Warning: probably invalid field {sort}, ignoring sort", file = sys.stderr)
+        logger.debug(f"Warning: probably invalid field {sort}, ignoring sort")
         return files
 
     files = sorted(files, key = lambda x: x.get(sort))
@@ -621,11 +633,19 @@ the config files and the template files distributed with this program.
     parser.add_argument('--output', '-o', help='File to generate (default: stdout)', default = None)
     parser.add_argument('--config', '-c', help='Config file')
     parser.add_argument('--functions', '-F', help='Functions file (default: custom_functions.py)', default = 'custom_functions.py')
+    parser.add_argument('--debug', '-d', help='Debug mode', action = 'store_true', default = False)
 
     args = parser.parse_args()
 
+    log_level = logging.DEBUG if args.debug else logging.INFO
+    logging.basicConfig(level=log_level, format='%(levelname)s: %(funcName)s: %(message)s')
+    logger = logging.getLogger(__name__)
+    if args.debug:
+        logging.debug("Debug mode on")
+
+
     if args.format == 'template' and not args.template:
-        print("Template file (option -t) required for template output", file = sys.stderr)
+        logger.debug("Template file (option -t) required for template output")
         sys.exit(1)
 
     if args.template:
@@ -646,25 +666,25 @@ the config files and the template files distributed with this program.
     files = [ ]
 
     if not yaml_file and not list_file:
-        print(f"Neither yaml_file nor list_file provided", file = sys.stderr)
+        logger.debug(f"Neither yaml_file nor list_file provided")
         sys.exit(1)
 
     if args.list == '-':
-        print("Reading from stdin", file = sys.stderr)
+        logger.debug("Reading from stdin")
         files += flatfile_load(None)
-        print(f"Read {len(files)} files from stdin", file = sys.stderr)
+        logger.debug(f"Read {len(files)} files from stdin")
     elif args.list:
         if os.path.exists(args.list):
             files += flatfile_load(args.list)
-            print(f"Read {len(files)} files from {args.list}", file = sys.stderr)
+            logger.debug(f"Read {len(files)} files from {args.list}")
         else:
-            print(f"List file {args.list} not found", file = sys.stderr)
+            logger.debug(f"List file {args.list} not found")
             sys.exit(1)
 
     files += yaml_load(args.yaml)['files'] if args.yaml.lower() != "none" and os.path.exists(args.yaml) else [ ]
 
     if len(files) == 0:
-        print(f"No files paths read, check options -y or -l", file = sys.stderr)
+        logger.debug(f"No files paths read, check options -y or -l")
         sys.exit(1)
 
     # get the real paths of the files
@@ -682,7 +702,7 @@ the config files and the template files distributed with this program.
     if args.format == 'template' or args.format == 'yaml':
         if args.format == 'template':
             if not os.path.exists(args.template):
-                print(f"Template file {args.template} not found", file = sys.stderr)
+                logger.debug(f"Template file {args.template} not found")
                 sys.exit(1)
 
             # process the template
