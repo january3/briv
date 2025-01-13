@@ -23,7 +23,7 @@ parser:
         # this rule is for finding sections. It matches the section name
         # which is then used as keyword. The second group matches the
         # remainder of the section including all key-value pairs.
-        Find_sections:
+        FindSections:
           # regex to find full sections
           regex: '^\[(.*)\].*\n((([^#;[]+) *= *(\w+))*)'
           key: 1
@@ -46,7 +46,7 @@ parser:
     Contents:
       rules:
         # same rule as in the rule Keynames
-        Find_sections:
+        FindSections:
           regex: '^\[(.*)\].*\n((([^#;[]+) *= *(\w+))*)'
           key: 1
           rules:

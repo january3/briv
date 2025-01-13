@@ -80,14 +80,14 @@ def load_function_from_file(file_path, function_name):
         logger.debug(f"Error loading function '{function_name}' from {file_path}: {e}")
         sys.exit(1)
 
-def parse_field(ret, field):
+def parse_field(ret, field, sep = '_'):
     """ convert a_b_c into [a][b][c]... structure
         and fill in the necessary structure """
 
     # the idea here is that we can use a single field like 
     # "a_b_c" to create a nested structure in the dictionary
     
-    key_stru = field.split("_")
+    key_stru = field.split(sep)
 
     cur = ret
 
@@ -583,7 +583,7 @@ def match_replace(match, printer, files, all_fields, func_file):
         raise ValueError(f"Unsupported print style: {print_style}") 
 
 
-def moustache_replace(printer, template, files, func_file):
+def moustache_replace(config, template, files, func_file):
     """
     Replace moustache placeholders in a string
 
@@ -592,6 +592,8 @@ def moustache_replace(printer, template, files, func_file):
     files: list of file dictionaries to process
     func_file: file with the functions to call
     """
+
+    printer = config.get('printer')
 
     if not printer:
         raise ValueError("No printer section in the config")
@@ -719,7 +721,7 @@ the config files and the template files distributed with this program.
 
             # process the template
             template = read_template(args.template)
-            cont = moustache_replace(config.get('printer'), template, files, args.functions)
+            cont = moustache_replace(config, template, files, args.functions)
 
         else:
             cont = yaml.dump(files, default_flow_style=False, sort_keys=False)
