@@ -69,9 +69,9 @@ parser:
               regex: '^([^[\n]+) *= *(.+)$'
               key: 1
               match: 2
-            # In the next two rules, we create a dict with the key Section
-            # containing Id (with the section name) and settings (with the
-            # key-value pairs.
+            # In the rule, we catch the section Id (which is group: 1 
+            # of the rule FindSections) and use it as a value for field
+            # "Id"
             Section_Id:
               group: 1
               regex: '^.*$'

@@ -44,6 +44,7 @@ description: first testing project
 url: https://example.com/testing
 ```
 
+
 Say, you would like to summarize a number of R projects in tabular form.
 R projects have a file called `DESCRIPTION` that contains metadata about
 the project. You can start by generating a list of all `DESCRIPTION` files:
@@ -64,13 +65,13 @@ parser:
   rules: 
     package:
       regex: 'Package: (.+)'
-      group: 1
+      match: 1
     version:
       regex: 'Version: (.+)'
-      group: 1
+      match: 1
     title:
       regex: 'Title: (.+)'
-      group: 1
+      match: 1
 ```
 
 Save it as `config.yaml` and you can run briv like this:
@@ -111,7 +112,7 @@ sub-rules). The match can be used subsequently to specify the value of the
 field, the name of the field, and apply sub-rules to the matched fragments.
 
 key: indicates how the resulting object should be named.
-  if absent, it is the name of the rule. Alternatively, it is the #no of the
+  if absent, it is the name of the rule. If present, it is the #no of the
   match group from the regex. this allows to create rules producing multiple
   key-val pairs by repeatedly matching the same pattern. Use 0 to match the
   full regex. 
@@ -122,7 +123,8 @@ key: indicates how the resulting object should be named.
   object will end up being "foo_bar_quack". See the 
   [INI parser example](examples/ini).
 
-group: this is only useful in sub-rules. It indicates the partial match on
+group: this is only useful in sub-rules (it is only valid if a match has
+been defined by the parent rule). It indicates the partial match on
 which the rule should act. Therefore, it is possible to use a rule to catch
 a fragment of the file (e.g. a section or a single line), and then apply
 other rules to that fragment. If group is 0, the whole match is used.
@@ -149,13 +151,58 @@ parser:
     match:
       url: 1
       domain: 2
-      relative: 3
+      page: 3
 ```
 
- * rules: it is a dict containing further rules. Now each rule must have a group as well as a
-          regex key. group indicates the matched fragment which this rule
+ * rules: it is a dict containing further rules. Now each rule may have a group 
+          key. group indicates the matched fragment which this rule
           works on. If group is absent, the whole text will be used. Other than that, it has the same syntax (i.e., it can
           contain the key, value, function and rules keywords).
  * function: This function will then be called with the match object as argument and the result 
              will be inserted into the result under
              the given field.
+
+What to do if you want to have, say, both match and a function? match that
+returns two keys and function for a third one? For example, you catch the
+persons name and email address, and would like to create a markdown link.
+
+```yaml
+parser:
+  rules:
+    person: 'Name (.*) <(\w+@\w++)>'
+      match:
+        name: 1
+        email: 2
+      function: make_link
+```
+
+Whatever function returns will become the value of the field "person", but
+your goal is actually to create a dictionary "person" with the fields
+"name", "email" and "link". 
+
+You can't simply use both
+match and function, because the function will replace whatever result was
+produced by match. Rather, create a set of sub-rules:
+
+
+```{r}
+parser:
+  rules:
+    person: 'Name (.*) <(\w+@\w++)>'
+    rules:
+      name:
+        match: 1
+      email:
+        match: 2:
+      link:
+        function: make_link
+```
+
+This works because if a rule does not contain a regex, it inherits whatever
+regex / text the previous rule has passed down.
+
+
+
+
+
+

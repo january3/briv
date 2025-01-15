@@ -77,7 +77,7 @@ def load_function_from_file(file_path, function_name):
         spec.loader.exec_module(module)
         return getattr(module, function_name)
     except Exception as e:
-        logger.debug(f"Error loading function '{function_name}' from {file_path}: {e}")
+        logger.error(f"Error loading function '{function_name}' from {file_path}: {e}")
         sys.exit(1)
 
 def parse_field(ret, field, sep = '_'):
@@ -460,6 +460,20 @@ def remove_duplicates(files):
 
     return files
 
+def skip_dirs_and_absent(files):
+    """ Skip directories and absent files """
+
+    ret = [ f for f in files if os.path.exists(f['path']) ]
+    ret = [ f for f in ret if os.path.isfile(f['path']) ]
+
+    for f in files:
+        if not os.path.exists(f['path']):
+            logging.warning(f"file {f['path']} does not exist, skipping")
+        elif os.path.isdir(f['path']):
+            logging.warning(f"file {f['path']} is a directory, skipping")
+
+    return ret
+
 def generate_ids(files):
     """generate unique ids for the files"""
 
@@ -706,6 +720,8 @@ the config files and the template files distributed with this program.
 
     # Check duplicates
     files = remove_duplicates(files)
+
+    files = skip_dirs_and_absent(files)
 
     # Generate unique ids
     files = generate_ids(files)
